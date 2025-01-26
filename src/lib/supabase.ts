@@ -7,11 +7,7 @@ if (!supabaseUrl || !supabaseKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  db: {
-    schema: 'app_tasklist'
-  }
-});
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Helper function to get table name with schema
+// Helper function to get table name
 export const table = (name: string) => name;

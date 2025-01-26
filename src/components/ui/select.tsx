@@ -3,9 +3,14 @@ import * as React from "react";
 interface SelectContextType {
   value?: string;
   onValueChange?: (value: string) => void;
+  isOpen: boolean;
+  setIsOpen: (isOpen: boolean) => void;
 }
 
-const SelectContext = React.createContext<SelectContextType>({});
+const SelectContext = React.createContext<SelectContextType>({
+  isOpen: false,
+  setIsOpen: () => {}
+});
 
 export function Select({
   value,
@@ -16,48 +21,62 @@ export function Select({
   onValueChange?: (value: string) => void;
   children: React.ReactNode;
 }) {
+  const [isOpen, setIsOpen] = React.useState(false);
+
   return (
-    <SelectContext.Provider value={{ value, onValueChange }}>
-      {children}
+    <SelectContext.Provider value={{ value, onValueChange, isOpen, setIsOpen }}>
+      <div className="relative">
+        {children}
+      </div>
     </SelectContext.Provider>
   );
 }
 
 export function SelectTrigger({ children }: { children: React.ReactNode }) {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const { isOpen, setIsOpen, value } = React.useContext(SelectContext);
   
   return (
-    <div className="relative">
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex h-9 w-full items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm hover:bg-gray-100"
-      >
-        {children}
-      </button>
-      {isOpen && <SelectContent>{children}</SelectContent>}
-    </div>
+    <button 
+      onClick={() => setIsOpen(!isOpen)}
+      className="w-full px-4 py-2 text-left border rounded-md bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      {children}
+    </button>
   );
 }
 
 export function SelectContent({ children }: { children: React.ReactNode }) {
+  const { isOpen, setIsOpen } = React.useContext(SelectContext);
+
+  if (!isOpen) return null;
+
   return (
-    <div className="absolute z-50 mt-1 w-full rounded-md border border-gray-200 bg-white shadow-lg">
-      <div className="p-1">
+    <>
+      <div 
+        className="fixed inset-0" 
+        onClick={() => setIsOpen(false)} 
+      />
+      <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg">
         {children}
       </div>
-    </div>
+    </>
   );
 }
 
 export function SelectItem({ value, children }: { value: string; children: React.ReactNode }) {
-  const { onValueChange } = React.useContext(SelectContext);
-  
+  const { onValueChange, setIsOpen } = React.useContext(SelectContext);
+
+  const handleClick = () => {
+    onValueChange?.(value);
+    setIsOpen(false);
+  };
+
   return (
-    <button
-      className="relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 px-2 text-sm outline-none hover:bg-gray-100"
-      onClick={() => onValueChange?.(value)}
+    <div
+      className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+      onClick={handleClick}
     >
       {children}
-    </button>
+    </div>
   );
 }
