@@ -2,6 +2,17 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Todo } from '../types';
 
+interface SaveResult {
+  success: boolean;
+  data?: string;
+  error?: string;
+}
+
+interface DeleteResult {
+  success: boolean;
+  error?: string;
+}
+
 export function useTaskEdit(selectedTask: Todo | null) {
   const [editedDescription, setEditedDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -14,7 +25,7 @@ export function useTaskEdit(selectedTask: Todo | null) {
     }
   }, [selectedTask]);
 
-  const saveDescription = async (taskId: string): Promise<{ success: boolean; data?: string; error?: string }> => {
+  const saveDescription = async (taskId: string): Promise<SaveResult> => {
     setIsSaving(true);
     setError(null);
 
@@ -22,7 +33,7 @@ export function useTaskEdit(selectedTask: Todo | null) {
       console.log('Saving description:', { taskId, description: editedDescription });
       
       const { data, error: updateError } = await supabase
-        .from('aisws_tasks')
+        .from('aiswsc_tasks')
         .update({
           description: editedDescription,
           updated_at: new Date().toISOString()
@@ -31,7 +42,10 @@ export function useTaskEdit(selectedTask: Todo | null) {
         .select()
         .single();
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Error updating task:', updateError);
+        throw updateError;
+      }
 
       console.log('Description saved successfully:', data);
       return { success: true, data: editedDescription };
@@ -45,16 +59,19 @@ export function useTaskEdit(selectedTask: Todo | null) {
     }
   };
 
-  const deleteTask = async (taskId: string): Promise<{ success: boolean; error?: string }> => {
+  const deleteTask = async (taskId: string): Promise<DeleteResult> => {
     setError(null);
 
     try {
       const { error: deleteError } = await supabase
-        .from('aisws_tasks')
+        .from('aiswsc_tasks')
         .delete()
         .eq('id', taskId);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error('Error deleting task:', deleteError);
+        throw deleteError;
+      }
 
       return { success: true };
     } catch (err) {

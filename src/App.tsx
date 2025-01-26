@@ -16,7 +16,7 @@ import {
   Users2,
   Trash2
 } from "lucide-react";
-import { supabase, table } from './lib/supabase';
+import { supabase } from './lib/supabase';
 import type { User, Todo } from './types';
 import { Avatar } from './components/Avatar';
 import { Tooltip } from './components/Tooltip';
@@ -36,10 +36,10 @@ const getCookie = (name: string): string | null => {
 
 // Some sample statuses with icons
 const STATUSES = [
-  { label: "Offen", color: "#d3d3d3", icon: CircleDashed },
-  { label: "In Arbeit", color: "#f1af54", icon: Clock },
-  { label: "Warte auf..", color: "#cd404e", icon: MessageCircle },
-  { label: "Erledigt", color: "#5ac57d", icon: CheckCircle2 },
+  { label: "Offen", color: "#d3d3d3", icon: CircleDashed, value: 'Offen' },
+  { label: "In Arbeit", color: "#f1af54", icon: Clock, value: 'In Arbeit' },
+  { label: "Warte auf..", color: "#cd404e", icon: MessageCircle, value: 'Wartet' },
+  { label: "Erledigt", color: "#5ac57d", icon: CheckCircle2, value: 'Erledigt' },
 ];
 
 export default function SharedTodoListApp() {
@@ -76,7 +76,7 @@ export default function SharedTodoListApp() {
     const lastUserId = getCookie('lastUserId');
     if (lastUserId) {
       supabase
-        .from(table('users'))
+        .from('aiswsc_users')
         .select('*')
         .eq('id', lastUserId)
         .single()
@@ -92,9 +92,9 @@ export default function SharedTodoListApp() {
   const sortedTodos = useMemo(() => {
     return [...todos].sort((a, b) => {
       if (sortDirection === 'asc') {
-        return STATUSES.findIndex(s => s.label === a.status) - STATUSES.findIndex(s => s.label === b.status);
+        return STATUSES.findIndex(s => s.value === a.status) - STATUSES.findIndex(s => s.value === b.status);
       } else {
-        return STATUSES.findIndex(s => s.label === b.status) - STATUSES.findIndex(s => s.label === a.status);
+        return STATUSES.findIndex(s => s.value === b.status) - STATUSES.findIndex(s => s.value === a.status);
       }
     });
   }, [todos, sortDirection]);
@@ -105,7 +105,7 @@ export default function SharedTodoListApp() {
 
   async function fetchUsers() {
     const { data, error } = await supabase
-      .from(table('users'))
+      .from('aiswsc_users')
       .select('*');
     
     if (error) {
@@ -120,8 +120,20 @@ export default function SharedTodoListApp() {
     if (!currentUser) return;
 
     const { data, error } = await supabase
-      .from(table('tasks'))
-      .select('*')
+      .from('aiswsc_tasks')
+      .select(`
+        *,
+        owner:aiswsc_users (
+          id,
+          name,
+          profile_pic_url
+        ),
+        waiting_for_task:aiswsc_tasks (
+          id,
+          title,
+          status
+        )
+      `)
       .order('created_at', { ascending: sortDirection === 'asc' });
 
     if (error) {
@@ -161,7 +173,7 @@ export default function SharedTodoListApp() {
 
   async function createUser(name: string, profilePicUrl: string) {
     const { data, error } = await supabase
-      .from(table('users'))
+      .from('aiswsc_users')
       .insert([
         { name, profile_pic_url: profilePicUrl }
       ])
@@ -180,7 +192,7 @@ export default function SharedTodoListApp() {
     if (!currentUser) return;
 
     const { error } = await supabase
-      .from(table('tasks'))
+      .from('aiswsc_tasks')
       .insert([
         {
           title,
@@ -196,7 +208,7 @@ export default function SharedTodoListApp() {
 
   async function updateTodo(id: string, updates: Partial<Todo>) {
     const { error } = await supabase
-      .from(table('tasks'))
+      .from('aiswsc_tasks')
       .update(updates)
       .eq('id', id);
     
@@ -209,9 +221,8 @@ export default function SharedTodoListApp() {
       todo.id === id ? { ...todo, ...updates } : todo
     ));
 
-    // Fetch todos again to get updated relationships
-    if (updates.waiting_for_task_id) {
-      fetchTodos();
+    if (selectedTodo?.id === id) {
+      setSelectedTodo(prev => prev ? { ...prev, ...updates } : null);
     }
   }
 
@@ -256,7 +267,7 @@ export default function SharedTodoListApp() {
     }
 
     const { data: newUser, error } = await supabase
-      .from(table('users'))
+      .from('aiswsc_users')
       .insert([
         {
           name: newUserName.trim(),
@@ -289,7 +300,7 @@ export default function SharedTodoListApp() {
 
       // If changing from "Warte auf.." to any other status, clear the waiting_for_task_id
       const updates: any = { status: newStatus };
-      if (todo.status === "Warte auf.." && newStatus !== "Warte auf..") {
+      if (todo.status === "Wartet" && newStatus !== "Wartet") {
         updates.waiting_for_task_id = null;
       }
 
@@ -299,13 +310,13 @@ export default function SharedTodoListApp() {
       }
 
       // Show wait dialog for "Warte auf.." status
-      if (newStatus === "Warte auf..") {
+      if (newStatus === "Wartet") {
         setSelectedTodo(todo);
         setShowWaitDialog(true);
       }
 
       const { error } = await supabase
-        .from('aisws_tasks')
+        .from('aiswsc_tasks')
         .update(updates)
         .eq('id', todoId);
 
@@ -313,9 +324,7 @@ export default function SharedTodoListApp() {
 
       // Update local state
       setTodos(todos.map(t => 
-        t.id === todoId 
-          ? { ...t, ...updates }
-          : t
+        t.id === todoId ? { ...t, ...updates } : t
       ));
 
       if (selectedTodo?.id === todoId) {
@@ -329,7 +338,7 @@ export default function SharedTodoListApp() {
   const handleTitleEdit = async (todoId: string, newTitle: string) => {
     try {
       const { error } = await supabase
-        .from('aisws_tasks')
+        .from('aiswsc_tasks')
         .update({ title: newTitle.trim() })
         .eq('id', todoId);
 
@@ -337,9 +346,7 @@ export default function SharedTodoListApp() {
 
       // Update local state
       setTodos(todos.map(t => 
-        t.id === todoId 
-          ? { ...t, title: newTitle.trim() }
-          : t
+        t.id === todoId ? { ...t, title: newTitle.trim() } : t
       ));
 
       if (selectedTodo?.id === todoId) {
@@ -420,7 +427,7 @@ export default function SharedTodoListApp() {
         {
           event: '*',
           schema: 'public',
-          table: table('users')
+          table: 'aiswsc_users'
         },
         (payload) => {
           console.log('Users change received!', payload);
@@ -455,7 +462,7 @@ export default function SharedTodoListApp() {
         {
           event: '*',
           schema: 'public',
-          table: table('tasks')
+          table: 'aiswsc_tasks'
         },
         (payload) => {
           console.log('Tasks change received!', payload);
@@ -511,7 +518,8 @@ export default function SharedTodoListApp() {
                         <Avatar
                           src={selectedFile ? URL.createObjectURL(selectedFile) : "/placeholder-avatar.png"}
                           alt="Profile"
-                          className="w-24 h-24 rounded-full object-cover"
+                          size={40}
+                          className="cursor-pointer hover:opacity-80 transition-opacity"
                         />
                         <label 
                           htmlFor="profile-pic"
@@ -568,7 +576,8 @@ export default function SharedTodoListApp() {
                         <Avatar
                           src={user.profile_pic_url}
                           alt={user.name}
-                          size="sm"
+                          size={24}
+                          className="mr-2"
                         />
                         <span>{user.name}</span>
                       </Button>
@@ -605,15 +614,16 @@ export default function SharedTodoListApp() {
             <>
               <div className="flex items-center justify-between bg-white px-4 py-2 rounded-lg shadow-sm">
                 <div className="flex items-center gap-3">
-                  <div className="relative group cursor-pointer shrink-0">
+                  <div className="relative">
                     <Avatar
                       src={currentUser.profile_pic_url}
                       alt={currentUser.name}
-                      className="border-2 border-white group-hover:opacity-75 transition-opacity w-10 h-10"
+                      size={40}
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
                     />
                     <label 
                       htmlFor="profile-pic-upload" 
-                      className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 text-white opacity-0 group-hover:opacity-100 rounded-full transition-opacity cursor-pointer"
+                      className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
                     >
                       <Camera className="w-4 h-4" />
                     </label>
@@ -632,7 +642,7 @@ export default function SharedTodoListApp() {
                           const profilePicUrl = await uploadProfilePic(file);
                           if (profilePicUrl) {
                             const { error } = await supabase
-                              .from(table('users'))
+                              .from('aiswsc_users')
                               .update({ profile_pic_url: profilePicUrl })
                               .eq('id', currentUser.id);
                             
@@ -682,8 +692,8 @@ export default function SharedTodoListApp() {
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 {STATUSES.map(status => {
-                  const statusTodos = sortedTodos.filter(todo => todo.status === status.label);
-                  const isCompleted = status.label === "Erledigt";
+                  const statusTodos = sortedTodos.filter(todo => todo.status === status.value);
+                  const isCompleted = status.value === "Erledigt";
                   
                   if (statusTodos.length === 0) return null;
                   
@@ -762,7 +772,8 @@ export default function SharedTodoListApp() {
                                       <Avatar
                                         src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
                                         alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
-                                        size="sm"
+                                        size={24}
+                                        className="mr-2"
                                       />
                                       <span className="text-sm text-gray-600">
                                         {allUsers.find(u => u.id === todo.owner_id)?.name}
@@ -775,7 +786,7 @@ export default function SharedTodoListApp() {
                                     className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
                                       todo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
                                     }`}
-                                    style={{ backgroundColor: STATUSES.find(s => s.label === todo.status)?.color }}
+                                    style={{ backgroundColor: STATUSES.find(s => s.value === todo.status)?.color }}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setShowStatusDropdown(todo.id);
@@ -783,7 +794,7 @@ export default function SharedTodoListApp() {
                                     data-todo-id={todo.id}
                                   >
                                     {React.createElement(
-                                      STATUSES.find(s => s.label === todo.status)?.icon || CircleDashed,
+                                      STATUSES.find(s => s.value === todo.status)?.icon || CircleDashed,
                                       { 
                                         size: 14,
                                         className: todo.status === "Offen" ? "text-gray-700" : "text-white"
@@ -822,7 +833,7 @@ export default function SharedTodoListApp() {
                                     style={{ backgroundColor: status.color }}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleStatusChange(todo.id, status.label);
+                                      handleStatusChange(todo.id, status.value);
                                       setShowStatusDropdown(null);
                                     }}
                                   >
@@ -872,7 +883,8 @@ export default function SharedTodoListApp() {
                         <Avatar
                           src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
                           alt={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}
-                          size="sm"
+                          size={24}
+                          className="mr-2"
                         />
                       </Tooltip>
                       {editingTodoId === selectedTodo.id ? (
@@ -910,11 +922,11 @@ export default function SharedTodoListApp() {
                       className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
                         selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
                       }`}
-                      style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
+                      style={{ backgroundColor: STATUSES.find(s => s.value === selectedTodo.status)?.color }}
                       onClick={() => setShowStatusDropdown(selectedTodo.id)}
                     >
                       {React.createElement(
-                        STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
+                        STATUSES.find(s => s.value === selectedTodo.status)?.icon || CircleDashed,
                         { 
                           size: 14,
                           className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
@@ -1007,7 +1019,7 @@ export default function SharedTodoListApp() {
                 )
                 .map(todo => {
                   const owner = allUsers.find(u => u.id === todo.owner_id);
-                  const status = STATUSES.find(s => s.label === todo.status);
+                  const status = STATUSES.find(s => s.value === todo.status);
                   return (
                     <button
                       key={todo.id}
@@ -1025,7 +1037,8 @@ export default function SharedTodoListApp() {
                       <Avatar
                         src={owner?.profile_pic_url}
                         alt={owner?.name || 'User'}
-                        size="sm"
+                        size={24}
+                        className="mr-2"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{todo.title}</div>

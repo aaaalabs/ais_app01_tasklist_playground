@@ -3,32 +3,30 @@ import { User2 } from 'lucide-react';
 interface AvatarProps {
   src?: string | null;
   alt: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: number;
   className?: string;
 }
 
-const sizeClasses = {
-  sm: 'w-8 h-8',
-  md: 'w-12 h-12',
-  lg: 'w-16 h-16'
-};
-
-export function Avatar({ src, alt, size = 'md', className = '' }: AvatarProps) {
-  const sizeClass = sizeClasses[size];
-  
-  if (!src) {
-    return (
-      <div className={`${sizeClass} rounded-full bg-gray-200 flex items-center justify-center ${className}`}>
-        <User2 className={size === 'sm' ? 'w-4 h-4' : 'w-6 h-6'} />
-      </div>
-    );
-  }
+export function Avatar({ src, alt, size = 32, className = '' }: AvatarProps) {
+  const showPlaceholder = !src;
 
   return (
-    <img
-      src={src}
-      alt={alt}
-      className={`${sizeClass} rounded-full object-cover ${className}`}
-    />
+    <div 
+      className={`relative rounded-full overflow-hidden flex items-center justify-center bg-gray-100 ${className}`}
+      style={{ width: size, height: size }}
+    >
+      {showPlaceholder ? (
+        <User2 
+          className="text-gray-400" 
+          size={Math.round(size * 0.6)} 
+        />
+      ) : (
+        <img
+          src={src || ''}
+          alt={alt}
+          className="w-full h-full object-cover"
+        />
+      )}
+    </div>
   );
 }
