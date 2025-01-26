@@ -27,7 +27,7 @@ export function DialogContent({
 }) {
   return (
     <div
-      className={`w-full min-w-[280px] rounded-lg bg-white p-6 shadow-lg ${className}`}
+      className={`mx-auto max-w-lg w-full min-w-[280px] rounded-lg bg-white p-6 shadow-lg ${className}`}
       onClick={e => e.stopPropagation()}
     >
       {children}

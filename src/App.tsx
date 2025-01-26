@@ -53,6 +53,7 @@ export default function SharedTodoListApp() {
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [showStatusDropdown, setShowStatusDropdown] = useState<string | null>(null);
   const [showWaitDialog, setShowWaitDialog] = useState(false);
+  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
@@ -79,9 +80,9 @@ export default function SharedTodoListApp() {
   const sortedTodos = useMemo(() => {
     return [...todos].sort((a, b) => {
       if (sortDirection === 'asc') {
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return STATUSES.findIndex(s => s.label === a.status) - STATUSES.findIndex(s => s.label === b.status);
       } else {
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return STATUSES.findIndex(s => s.label === b.status) - STATUSES.findIndex(s => s.label === a.status);
       }
     });
   }, [todos, sortDirection]);
@@ -452,220 +453,233 @@ export default function SharedTodoListApp() {
   }, [currentUser?.id]); // Only re-run if current user changes
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4">
-      <AnimatePresence>
-        <Dialog open={showSplash} onOpenChange={setShowSplash}>
-          <DialogContent className="sm:max-w-md">
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-center">
-                {isCreatingNewUser ? "Neuer Benutzer" : "Wähle deinen Benutzer"}
-              </h2>
-              
-              {isCreatingNewUser ? (
-                <div className="space-y-4">
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="relative">
-                      <Avatar
-                        src={selectedFile ? URL.createObjectURL(selectedFile) : "/placeholder-avatar.png"}
-                        alt="Profile"
-                        className="w-24 h-24 rounded-full object-cover"
-                      />
-                      <label 
-                        htmlFor="profile-pic"
-                        className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
-                      >
-                        <Camera className="w-4 h-4" />
-                      </label>
-                      <input
-                        type="file"
-                        id="profile-pic"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={e => {
-                          const file = e.target.files?.[0];
-                          if (file) setSelectedFile(file);
-                        }}
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      <div className="flex-grow p-4">
+        <AnimatePresence>
+          <Dialog open={showSplash} onOpenChange={setShowSplash}>
+            <DialogContent className="sm:max-w-md">
+              <div className="space-y-6">
+                <h2 className="text-2xl font-bold text-center">
+                  {isCreatingNewUser ? "Neuer Benutzer" : "Wähle deinen Benutzer"}
+                </h2>
+                
+                {isCreatingNewUser ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="relative">
+                        <Avatar
+                          src={selectedFile ? URL.createObjectURL(selectedFile) : "/placeholder-avatar.png"}
+                          alt="Profile"
+                          className="w-24 h-24 rounded-full object-cover"
+                        />
+                        <label 
+                          htmlFor="profile-pic"
+                          className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
+                        >
+                          <Camera className="w-4 h-4" />
+                        </label>
+                        <input
+                          type="file"
+                          id="profile-pic"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) setSelectedFile(file);
+                          }}
+                        />
+                      </div>
+                      <Input
+                        placeholder="Dein Name"
+                        value={newUserName}
+                        onChange={e => setNewUserName(e.target.value)}
+                        className="max-w-xs"
                       />
                     </div>
-                    <Input
-                      placeholder="Dein Name"
-                      value={newUserName}
-                      onChange={e => setNewUserName(e.target.value)}
-                      className="max-w-xs"
-                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setIsCreatingNewUser(false);
+                          setNewUserName("");
+                          setSelectedFile(null);
+                        }}
+                      >
+                        Abbrechen
+                      </Button>
+                      <Button
+                        onClick={handleCreateUser}
+                        disabled={!newUserName.trim() || !selectedFile}
+                      >
+                        Speichern
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex justify-end gap-2">
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {allUsers.map(user => (
+                      <Button
+                        key={user.id}
+                        variant="outline"
+                        className="flex items-center gap-2 h-auto p-4"
+                        onClick={() => handleUserSelect(user)}
+                      >
+                        <Avatar
+                          src={user.profile_pic_url}
+                          alt={user.name}
+                          size="sm"
+                        />
+                        <span>{user.name}</span>
+                      </Button>
+                    ))}
                     <Button
-                      variant="outline"
-                      onClick={() => {
-                        setIsCreatingNewUser(false);
-                        setNewUserName("");
-                        setSelectedFile(null);
-                      }}
-                    >
-                      Abbrechen
-                    </Button>
-                    <Button
-                      onClick={handleCreateUser}
-                      disabled={!newUserName.trim() || !selectedFile}
-                    >
-                      Speichern
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  {allUsers.map(user => (
-                    <Button
-                      key={user.id}
                       variant="outline"
                       className="flex items-center gap-2 h-auto p-4"
-                      onClick={() => handleUserSelect(user)}
+                      onClick={() => handleUserSelect(null)}
                     >
-                      <Avatar
-                        src={user.profile_pic_url}
-                        alt={user.name}
-                        size="sm"
-                      />
-                      <span>{user.name}</span>
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Plus className="w-5 h-5 text-gray-500" />
+                      </div>
+                      <span>Neuer Benutzer</span>
                     </Button>
-                  ))}
+                  </div>
+                )}
+              </div>
+            </DialogContent>
+          </Dialog>
+        </AnimatePresence>
+
+        {triggerConfetti && (
+          <Confetti
+            width={window.innerWidth}
+            height={window.innerHeight}
+            recycle={false}
+            numberOfPieces={200}
+            onConfettiComplete={() => setTriggerConfetti(false)}
+          />
+        )}
+
+        <div className="max-w-6xl mx-auto space-y-8">
+          {currentUser && (
+            <>
+              <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="relative group cursor-pointer">
+                    <Avatar
+                      src={currentUser.profile_pic_url}
+                      alt={currentUser.name}
+                      className="border-2 border-white group-hover:opacity-75 transition-opacity"
+                    />
+                    <label 
+                      htmlFor="profile-pic-upload" 
+                      className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 text-white opacity-0 group-hover:opacity-100 rounded-full transition-opacity cursor-pointer"
+                    >
+                      <Camera className="w-5 h-5" />
+                    </label>
+                    <input
+                      id="profile-pic-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file && currentUser) {
+                          // Show loading state
+                          const avatar = document.querySelector(`[alt="${currentUser.name}"]`);
+                          if (avatar) avatar.classList.add('opacity-50');
+                          
+                          const profilePicUrl = await uploadProfilePic(file);
+                          if (profilePicUrl) {
+                            const { error } = await supabase
+                              .from(table('users'))
+                              .update({ profile_pic_url: profilePicUrl })
+                              .eq('id', currentUser.id);
+                            
+                            if (!error) {
+                              setCurrentUser(prev => ({ ...prev, profile_pic_url: profilePicUrl }));
+                            }
+                          }
+                          
+                          // Remove loading state
+                          if (avatar) avatar.classList.remove('opacity-50');
+                        }
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold">Willkommen, {currentUser.name}!</h1>
+                    <p className="text-sm text-gray-500">Klicke auf dein Profilbild, um es zu ändern</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
-                    className="flex items-center gap-2 h-auto p-4"
-                    onClick={() => handleUserSelect(null)}
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowSplash(true)}
                   >
-                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                      <Plus className="w-5 h-5 text-gray-500" />
-                    </div>
-                    <span>Neuer Benutzer</span>
+                    <Users2 className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                  >
+                    {sortDirection === 'asc' ? <ArrowUpNarrowWide className="w-5 h-5" /> : <ArrowDownNarrowWide className="w-5 h-5" />}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="icon"
+                    onClick={addNewTodo}
+                    className="w-10 h-10 p-0 bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Plus className="h-5 w-5" />
                   </Button>
                 </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      </AnimatePresence>
-
-      {triggerConfetti && (
-        <Confetti
-          width={window.innerWidth}
-          height={window.innerHeight}
-          recycle={false}
-          numberOfPieces={200}
-          onConfettiComplete={() => setTriggerConfetti(false)}
-        />
-      )}
-
-      <div className="max-w-6xl mx-auto space-y-8">
-        {currentUser && (
-          <>
-            <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm">
-              <div className="flex items-center gap-4">
-                <div className="relative group cursor-pointer">
-                  <Avatar
-                    src={currentUser.profile_pic_url}
-                    alt={currentUser.name}
-                    className="border-2 border-white group-hover:opacity-75 transition-opacity"
-                  />
-                  <label 
-                    htmlFor="profile-pic-upload" 
-                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 text-white opacity-0 group-hover:opacity-100 rounded-full transition-opacity cursor-pointer"
-                  >
-                    <Camera className="w-5 h-5" />
-                  </label>
-                  <input
-                    id="profile-pic-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file && currentUser) {
-                        // Show loading state
-                        const avatar = document.querySelector(`[alt="${currentUser.name}"]`);
-                        if (avatar) avatar.classList.add('opacity-50');
-                        
-                        const profilePicUrl = await uploadProfilePic(file);
-                        if (profilePicUrl) {
-                          const { error } = await supabase
-                            .from(table('users'))
-                            .update({ profile_pic_url: profilePicUrl })
-                            .eq('id', currentUser.id);
-                          
-                          if (!error) {
-                            setCurrentUser(prev => ({ ...prev, profile_pic_url: profilePicUrl }));
-                          }
-                        }
-                        
-                        // Remove loading state
-                        if (avatar) avatar.classList.remove('opacity-50');
-                      }
-                    }}
-                  />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold">Willkommen, {currentUser.name}!</h1>
-                  <p className="text-sm text-gray-500">Klicke auf dein Profilbild, um es zu ändern</p>
-                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowSplash(true)}
-                >
-                  <Users2 className="w-5 h-5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                >
-                  {sortDirection === 'asc' ? <ArrowUpNarrowWide className="w-5 h-5" /> : <ArrowDownNarrowWide className="w-5 h-5" />}
-                </Button>
-                <Button
-                  variant="default"
-                  size="icon"
-                  onClick={addNewTodo}
-                  className="w-10 h-10 p-0 bg-blue-600 hover:bg-blue-700"
-                >
-                  <Plus className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {STATUSES.map(status => (
-                <div key={status.label} className="space-y-4">
-                  <h2 
-                    className="font-semibold flex items-center gap-2"
-                    style={{ color: status.color }}
-                  >
-                    {React.createElement(status.icon, { 
-                      size: 16,
-                      style: { color: status.color }
-                    })}
-                    {status.label}
-                  </h2>
-                  <div className="space-y-4">
-                    {sortedTodos
-                      .filter(todo => todo.status === status.label)
-                      .map(todo => (
-                        <div
-                          key={todo.id}
-                          className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {STATUSES.map(status => {
+                  const statusTodos = sortedTodos.filter(todo => todo.status === status.label);
+                  const isCompleted = status.label === "Erledigt";
+                  
+                  if (statusTodos.length === 0) return null;
+                  
+                  return (
+                    <div key={status.label} className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h2 
+                          className="font-semibold flex items-center gap-2"
+                          style={{ color: status.color }}
                         >
-                          <div className="p-4 cursor-pointer" onClick={() => setSelectedTodo(todo)}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3 min-w-0">
-                                <Tooltip content={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}>
-                                  <Avatar
-                                    src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
-                                    alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
-                                    size="sm"
-                                  />
-                                </Tooltip>
+                          {React.createElement(status.icon, { 
+                            size: 16,
+                            style: { color: status.color }
+                          })}
+                          <span className="flex items-center gap-2">
+                            {status.label}
+                            <span className="text-sm text-gray-500">({statusTodos.length})</span>
+                          </span>
+                        </h2>
+                        {isCompleted && statusTodos.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowCompletedTasks(prev => !prev)}
+                            className="text-sm text-gray-500 hover:text-gray-700"
+                          >
+                            {showCompletedTasks ? "Ausblenden" : "Anzeigen"}
+                          </Button>
+                        )}
+                      </div>
+                      <div className="space-y-4">
+                        {(!isCompleted || showCompletedTasks) && statusTodos.map(todo => (
+                          <div
+                            key={todo.id}
+                            className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                          >
+                            <div className="p-4 cursor-pointer space-y-3" onClick={() => setSelectedTodo(todo)}>
+                              {/* Title Row */}
+                              <div className="w-full">
                                 {editingTodoId === todo.id ? (
                                   <form
                                     onSubmit={(e) => {
@@ -685,7 +699,7 @@ export default function SharedTodoListApp() {
                                   </form>
                                 ) : (
                                   <span 
-                                    className="text-lg font-semibold text-gray-900 truncate hover:text-blue-600 cursor-text"
+                                    className="text-lg font-semibold text-gray-900 block hover:text-blue-600 cursor-text"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       setEditingTodoId(todo.id);
@@ -696,28 +710,49 @@ export default function SharedTodoListApp() {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex items-center gap-2 ml-4">
-                                <div
-                                  className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                                    todo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                                  }`}
-                                  style={{ backgroundColor: STATUSES.find(s => s.label === todo.status)?.color }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowStatusDropdown(todo.id);
-                                  }}
-                                  data-todo-id={todo.id}
-                                >
-                                  {React.createElement(
-                                    STATUSES.find(s => s.label === todo.status)?.icon || CircleDashed,
-                                    { 
-                                      size: 14,
-                                      className: todo.status === "Offen" ? "text-gray-700" : "text-white"
-                                    }
-                                  )}
-                                  <span className="whitespace-nowrap">{todo.status}</span>
+
+                              {/* User and Status Row */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <Tooltip content={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}>
+                                    <Avatar
+                                      src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
+                                      alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
+                                      size="sm"
+                                    />
+                                  </Tooltip>
+                                </div>
+                                <div className="flex items-center">
+                                  <div
+                                    className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                                      todo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                                    }`}
+                                    style={{ backgroundColor: STATUSES.find(s => s.label === todo.status)?.color }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setShowStatusDropdown(todo.id);
+                                    }}
+                                    data-todo-id={todo.id}
+                                  >
+                                    {React.createElement(
+                                      STATUSES.find(s => s.label === todo.status)?.icon || CircleDashed,
+                                      { 
+                                        size: 14,
+                                        className: todo.status === "Offen" ? "text-gray-700" : "text-white"
+                                      }
+                                    )}
+                                    <span className="whitespace-nowrap">{todo.status}</span>
+                                  </div>
                                 </div>
                               </div>
+
+                              {/* Waiting Status Row */}
+                              {todo.waiting_for_task_id && (
+                                <div className="text-sm text-gray-500 flex items-center gap-1.5">
+                                  <MessageCircle size={14} />
+                                  Wartet auf: {todos.find(t => t.id === todo.waiting_for_task_id)?.title}
+                                </div>
+                              )}
                             </div>
 
                             {showStatusDropdown === todo.id && (
@@ -753,22 +788,26 @@ export default function SharedTodoListApp() {
                               </div>
                             )}
                           </div>
-
-                          {todo.waiting_for_task_id && (
-                            <div className="text-sm text-gray-500 flex items-center gap-1.5 mt-2">
-                              <MessageCircle size={14} />
-                              Wartet auf: {todos.find(t => t.id === todo.waiting_for_task_id)?.title}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
       </div>
+
+      {/* Footer */}
+      <footer className="h-[30px] flex items-center justify-center text-gray-400 text-xs space-x-2">
+        <img 
+          src="https://ik.imagekit.io/libralab/AIS/AI%20shift%20Logo%20Wide.png?updatedAt=1737896017901" 
+          alt="AI-Shift Logo" 
+          className="h-4 w-auto"
+        />
+        <span> 2025 - AI-Shift.de</span>
+      </footer>
 
       <Dialog open={!!selectedTodo && !showWaitDialog} onOpenChange={(open) => {
         if (!open) setSelectedTodo(null);
@@ -778,184 +817,84 @@ export default function SharedTodoListApp() {
             <DialogTitle>
               {selectedTodo && (
                 <div className="space-y-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Tooltip content={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}>
-                          <Avatar
-                            src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
-                            alt={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}
-                            size="sm"
-                          />
-                        </Tooltip>
-                        {editingTodoId === selectedTodo.id ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              handleTitleEdit(selectedTodo.id, editingTitle);
-                            }}
-                          >
-                            <input
-                              ref={editInputRef}
-                              type="text"
-                              value={editingTitle}
-                              onChange={(e) => setEditingTitle(e.target.value)}
-                              onBlur={() => handleTitleEdit(selectedTodo.id, editingTitle)}
-                              className="w-full text-2xl font-bold text-gray-900 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
-                            />
-                          </form>
-                        ) : (
-                          <h1 
-                            className="text-2xl font-bold text-gray-900 truncate hover:text-blue-600 cursor-text"
-                            onClick={() => {
-                              setEditingTodoId(selectedTodo.id);
-                              setEditingTitle(selectedTodo.title);
-                            }}
-                          >
-                            {selectedTodo.title}
-                          </h1>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 ml-4">
-                        <div
-                          className={`relative w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                            selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                          }`}
-                          style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
-                          onClick={() => setShowStatusDropdown(selectedTodo.id)}
+                  {/* Title Row */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-grow">
+                      <Tooltip content={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}>
+                        <Avatar
+                          src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
+                          alt={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}
+                          size="sm"
+                        />
+                      </Tooltip>
+                      {editingTodoId === selectedTodo.id ? (
+                        <form
+                          className="flex-grow"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleTitleEdit(selectedTodo.id, editingTitle);
+                          }}
                         >
-                          {React.createElement(
-                            STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
-                            { 
-                              size: 14,
-                              className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
-                            }
-                          )}
-                          <span className="whitespace-nowrap">{selectedTodo.status}</span>
-
-                          {showStatusDropdown === selectedTodo.id && (
-                            <div 
-                              ref={statusDropdownRef}
-                              style={{
-                                position: 'fixed',
-                                transform: 'translateY(8px)'
-                              }}
-                              className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
-                            >
-                              {STATUSES.map(status => (
-                                <button
-                                  key={status.label}
-                                  type="button"
-                                  className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
-                                    status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                                  }`}
-                                  style={{ backgroundColor: status.color }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStatusChange(selectedTodo.id, status.label);
-                                    setShowStatusDropdown(null);
-                                  }}
-                                >
-                                  {React.createElement(status.icon, { 
-                                    size: 14,
-                                    className: status.label === "Offen" ? "text-gray-700" : "text-white"
-                                  })}
-                                  <span className="whitespace-nowrap">{status.label}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                          <input
+                            ref={editInputRef}
+                            type="text"
+                            value={editingTitle}
+                            onChange={(e) => setEditingTitle(e.target.value)}
+                            onBlur={() => handleTitleEdit(selectedTodo.id, editingTitle)}
+                            className="w-full text-2xl font-bold text-gray-900 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                          />
+                        </form>
+                      ) : (
+                        <h1 
+                          className="text-2xl font-bold text-gray-900 cursor-text hover:text-blue-600"
+                          onClick={() => {
+                            setEditingTodoId(selectedTodo.id);
+                            setEditingTitle(selectedTodo.title);
+                          }}
+                        >
+                          {selectedTodo.title}
+                        </h1>
+                      )}
                     </div>
-                    <textarea
-                      value={selectedTodo.description || ''}
-                      onChange={e => handleDescriptionChange(selectedTodo.id, e.target.value)}
-                      placeholder="Beschreibung hinzufügen..."
-                      className="w-full h-32 p-3 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 hover:bg-white transition-colors"
-                    />
+                    
+                    {/* Status Button */}
+                    <div
+                      className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                        selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                      }`}
+                      style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
+                      onClick={() => setShowStatusDropdown(selectedTodo.id)}
+                    >
+                      {React.createElement(
+                        STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
+                        { 
+                          size: 14,
+                          className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
+                        }
+                      )}
+                      <span className="whitespace-nowrap">{selectedTodo.status}</span>
+                    </div>
                   </div>
+
+                  {/* Description */}
+                  <textarea
+                    value={selectedTodo.description || ''}
+                    onChange={e => handleDescriptionChange(selectedTodo.id, e.target.value)}
+                    placeholder="Beschreibung hinzufügen..."
+                    className="w-full h-32 p-3 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 hover:bg-white transition-colors"
+                  />
+
+                  {/* Waiting Status */}
+                  {selectedTodo.waiting_for_task_id && (
+                    <div className="text-sm text-gray-500 flex items-center gap-1.5">
+                      <MessageCircle size={14} />
+                      Wartet auf: {todos.find(t => t.id === selectedTodo.waiting_for_task_id)?.title}
+                    </div>
+                  )}
                 </div>
               )}
             </DialogTitle>
           </DialogHeader>
-
-          {selectedTodo && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Tooltip content={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}>
-                    <Avatar
-                      src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
-                      alt={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}
-                      size="sm"
-                    />
-                  </Tooltip>
-                  <h1 className="text-2xl font-bold text-gray-900 truncate">
-                    {selectedTodo.title}
-                  </h1>
-                </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <div
-                    className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                      selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                    }`}
-                    style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
-                    onClick={() => setShowStatusDropdown(selectedTodo.id)}
-                  >
-                    {React.createElement(
-                      STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
-                      { 
-                        size: 14,
-                        className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
-                      }
-                    )}
-                    <span className="whitespace-nowrap">{selectedTodo.status}</span>
-
-                    {showStatusDropdown === selectedTodo.id && (
-                      <div 
-                        ref={statusDropdownRef}
-                        style={{
-                          position: 'fixed',
-                          transform: 'translateY(8px)'
-                        }}
-                        className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
-                      >
-                        {STATUSES.map(status => (
-                          <button
-                            key={status.label}
-                            type="button"
-                            className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
-                              status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                            }`}
-                            style={{ backgroundColor: status.color }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStatusChange(selectedTodo.id, status.label);
-                              setShowStatusDropdown(null);
-                            }}
-                          >
-                            {React.createElement(status.icon, { 
-                              size: 14,
-                              className: status.label === "Offen" ? "text-gray-700" : "text-white"
-                            })}
-                            <span className="whitespace-nowrap">{status.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {selectedTodo.waiting_for_task_id && (
-                <div className="text-sm text-gray-500 flex items-center gap-1.5">
-                  <MessageCircle size={14} />
-                  Wartet auf: {todos.find(t => t.id === selectedTodo.waiting_for_task_id)?.title}
-                </div>
-              )}
-            </div>
-          )}
         </DialogContent>
       </Dialog>
 
