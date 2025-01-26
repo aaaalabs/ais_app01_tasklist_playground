@@ -20,6 +20,7 @@ import { supabase, table } from './lib/supabase';
 import type { User, Todo } from './types';
 import { Avatar } from './components/Avatar';
 import { Tooltip } from './components/Tooltip';
+import { useTaskEdit } from './hooks/useTaskEdit';
 
 // Cookie handling functions
 const setCookie = (name: string, value: string, days: number = 30) => {
@@ -59,6 +60,16 @@ export default function SharedTodoListApp() {
   const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  const {
+    editedDescription,
+    setEditedDescription,
+    isSaving,
+    error: saveError,
+    saveDescription,
+    deleteTask,
+    hasChanges
+  } = useTaskEdit(selectedTodo);
 
   // Load saved user on initial mount
   useEffect(() => {
@@ -350,13 +361,29 @@ export default function SharedTodoListApp() {
     setSelectedTodo(prev => prev ? { ...prev, description } : null);
   };
 
-  const handleDeleteTodo = async (todoId: string) => {
-    const { error } = await supabase
-      .from(table('tasks'))
-      .delete()
-      .eq('id', todoId);
+  const handleDescriptionSave = async (id: string) => {
+    console.log('Starting to save description for task:', id);
+    const result = await saveDescription(id);
+    
+    if (result.success) {
+      console.log('Successfully saved description, updating UI');
+      setTodos(prev => {
+        const newTodos = prev.map(todo => 
+          todo.id === id ? { ...todo, description: result.data } : todo
+        );
+        console.log('Updated todos:', newTodos);
+        return newTodos;
+      });
+      setSelectedTodo(null); // Close the dialog after successful save
+      console.log('Dialog closed');
+    } else {
+      console.error('Failed to save description:', result.error);
+    }
+  };
 
-    if (!error) {
+  const handleDeleteTodo = async (todoId: string) => {
+    const result = await deleteTask(todoId);
+    if (result.success) {
       setTodos(prev => prev.filter(t => t.id !== todoId));
       setSelectedTodo(null);
     }
@@ -377,6 +404,12 @@ export default function SharedTodoListApp() {
       editInputRef.current.focus();
     }
   }, [editingTodoId]);
+
+  useEffect(() => {
+    if (selectedTodo) {
+      setEditedDescription(selectedTodo.description || "");
+    }
+  }, [selectedTodo]);
 
   useEffect(() => {
     // Subscribe to users table changes
@@ -894,13 +927,38 @@ export default function SharedTodoListApp() {
                   {/* Description */}
                   <div className="flex flex-col gap-4">
                     <textarea
-                      value={selectedTodo.description || ''}
-                      onChange={e => handleDescriptionChange(selectedTodo.id, e.target.value)}
+                      value={editedDescription}
+                      onChange={e => setEditedDescription(e.target.value)}
                       placeholder="Beschreibung hinzufügen..."
                       className="w-full h-32 p-3 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 hover:bg-white transition-colors"
                     />
                     
-                    <div className="flex justify-end">
+                    {saveError && (
+                      <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                        Fehler beim Speichern. Bitte versuchen Sie es erneut.
+                      </p>
+                    )}
+                    
+                    <div className="flex justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDescriptionSave(selectedTodo.id)}
+                        className="text-sm"
+                        disabled={!hasChanges || isSaving}
+                      >
+                        {isSaving ? (
+                          <>
+                            <span className="animate-spin mr-2">⏳</span>
+                            Speichern...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            Speichern & Schließen
+                          </>
+                        )}
+                      </Button>
                       <Button
                         variant="destructive"
                         size="sm"
