@@ -66,31 +66,28 @@ CREATE POLICY "Anyone can delete tasks"
     USING (true);
 
 -- Insert sample users
-INSERT INTO app_tasklist.users (id, name, profile_pic_url) VALUES
-    (gen_random_uuid(), 'Max', 'https://i.pravatar.cc/64?u=Max'),
-    (gen_random_uuid(), 'Julia', 'https://i.pravatar.cc/64?u=Julia'),
-    (gen_random_uuid(), 'Tom', 'https://i.pravatar.cc/64?u=Tom'),
-    (gen_random_uuid(), 'Anna', 'https://i.pravatar.cc/64?u=Anna');
+INSERT INTO app_tasklist.users (id, name, profile_pic_url, created_at) VALUES 
+    ('433b2983-c8c9-4120-8bd9-b1089a5ff162', 'Thomas', 'https://i.pravatar.cc/64?u=Julia', '2025-01-26 04:14:05.868543+00'),
+    ('5379058e-bf45-432b-96e0-0a1f9487f9e8', 'Sophia', 'https://i.pravatar.cc/64?u=Anna', '2025-01-26 04:14:05.868543+00'),
+    ('56a61220-44b5-4f41-9d46-084fab38bc21', 'Jan', 'https://i.pravatar.cc/64?u=Tom', '2025-01-26 04:14:05.868543+00');
 
 -- Insert sample tasks
 DO $$
 DECLARE
-    max_id UUID;
-    julia_id UUID;
-    tom_id UUID;
-    anna_id UUID;
+    thomas_id UUID;
+    sophia_id UUID;
+    jan_id UUID;
 BEGIN
     -- Get user IDs
-    SELECT id INTO max_id FROM app_tasklist.users WHERE name = 'Max' LIMIT 1;
-    SELECT id INTO julia_id FROM app_tasklist.users WHERE name = 'Julia' LIMIT 1;
-    SELECT id INTO tom_id FROM app_tasklist.users WHERE name = 'Tom' LIMIT 1;
-    SELECT id INTO anna_id FROM app_tasklist.users WHERE name = 'Anna' LIMIT 1;
+    SELECT id INTO thomas_id FROM app_tasklist.users WHERE name = 'Thomas' LIMIT 1;
+    SELECT id INTO sophia_id FROM app_tasklist.users WHERE name = 'Sophia' LIMIT 1;
+    SELECT id INTO jan_id FROM app_tasklist.users WHERE name = 'Jan' LIMIT 1;
 
     -- Insert tasks
     INSERT INTO app_tasklist.tasks (title, owner_id, status) VALUES
-        ('Homepage Design', max_id, 'In Arbeit'),
-        ('API Integration', julia_id, 'Offen'),
-        ('Bug Fixes', tom_id, 'Warte auf..'),
-        ('Documentation', anna_id, 'Erledigt'),
-        ('Testing', max_id, 'In Arbeit');
+        ('Homepage Design', thomas_id, 'In Arbeit'),
+        ('API Integration', sophia_id, 'Offen'),
+        ('Bug Fixes', jan_id, 'Warte auf..'),
+        ('Documentation', sophia_id, 'Erledigt'),
+        ('Testing', thomas_id, 'In Arbeit');
 END $$;

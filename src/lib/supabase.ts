@@ -9,5 +9,5 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Helper function to get table name
-export const table = (name: string) => name;
+// Helper function to get table name with prefix
+export const table = (name: string) => `aisws_${name}`;

@@ -1,22 +1,24 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Confetti from "react-confetti";
-import { 
-  Camera, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  CircleDashed, 
+import {
+  Camera,
+  Clock,
+  CircleDashed,
+  CheckCircle2,
   MessageCircle,
   Plus,
   ArrowDownNarrowWide,
-  ArrowUpNarrowWide
+  ArrowUpNarrowWide,
+  Users2
 } from "lucide-react";
 import { supabase, table } from './lib/supabase';
 import type { User, Todo } from './types';
+import { Avatar } from './components/Avatar';
+import { Tooltip } from './components/Tooltip';
 
 // Cookie handling functions
 const setCookie = (name: string, value: string, days: number = 30) => {
@@ -34,7 +36,7 @@ const getCookie = (name: string): string | null => {
 const STATUSES = [
   { label: "Offen", color: "#d3d3d3", icon: CircleDashed },
   { label: "In Arbeit", color: "#f1af54", icon: Clock },
-  { label: "Warte auf..", color: "#cd404e", icon: AlertCircle },
+  { label: "Warte auf..", color: "#cd404e", icon: MessageCircle },
   { label: "Erledigt", color: "#5ac57d", icon: CheckCircle2 },
 ];
 
@@ -55,38 +57,68 @@ export default function SharedTodoListApp() {
 
   // Load saved user on initial mount
   useEffect(() => {
-    const loadSavedUser = async () => {
-      const savedUserId = getCookie('lastUserId');
-      if (savedUserId) {
-        const { data: user } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', savedUserId)
-          .single();
-        
-        if (user) {
-          setCurrentUser(user);
-          setShowSplash(false);
-        }
-      }
-    };
-
-    loadSavedUser();
+    const lastUserId = getCookie('lastUserId');
+    if (lastUserId) {
+      supabase
+        .from(table('users'))
+        .select('*')
+        .eq('id', lastUserId)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setCurrentUser(data);
+            setShowSplash(false);
+          }
+        });
+    }
   }, []);
 
-  const sortedTodos = [...todos].sort((a, b) => {
-    const direction = sortDirection === 'asc' ? 1 : -1;
-    const dateA = new Date(a.updated_at).getTime();
-    const dateB = new Date(b.updated_at).getTime();
-    return (dateB - dateA) * direction;
-  });
+  const sortedTodos = useMemo(() => {
+    return [...todos].sort((a, b) => {
+      if (sortDirection === 'asc') {
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      } else {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
+    });
+  }, [todos, sortDirection]);
 
   useEffect(() => {
     fetchUsers();
-    if (currentUser) {
-      fetchTodos();
+  }, []);
+
+  async function fetchUsers() {
+    const { data, error } = await supabase
+      .from(table('users'))
+      .select('*');
+    
+    if (error) {
+      console.error('Error fetching users:', error);
+      return;
     }
-  }, [currentUser]);
+
+    setAllUsers(data);
+  }
+
+  async function fetchTodos() {
+    if (!currentUser) return;
+
+    const { data, error } = await supabase
+      .from(table('tasks'))
+      .select('*')
+      .order('created_at', { ascending: sortDirection === 'asc' });
+
+    if (error) {
+      console.error('Error fetching todos:', error);
+      return;
+    }
+
+    setTodos(data || []);
+  }
+
+  useEffect(() => {
+    fetchTodos();
+  }, [currentUser, sortDirection]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -110,35 +142,6 @@ export default function SharedTodoListApp() {
       }
     }
   }, [showStatusDropdown]);
-
-  async function fetchUsers() {
-    const { data, error } = await supabase
-      .from(table('users'))
-      .select('*');
-    
-    if (error) {
-      console.error('Error fetching users:', error);
-      return;
-    }
-
-    setAllUsers(data);
-  }
-
-  async function fetchTodos() {
-    if (!currentUser) return;
-
-    const { data, error } = await supabase
-      .from(table('tasks'))
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error('Error fetching todos:', error);
-      return;
-    }
-
-    setTodos(data);
-  }
 
   async function createUser(name: string, profilePicUrl: string) {
     const { data, error } = await supabase
@@ -268,19 +271,47 @@ export default function SharedTodoListApp() {
     createTodo("Neues ToDo");
   };
 
-  const handleStatusChange = (todoId: string, newStatus: string) => {
-    if (newStatus === "Erledigt") {
-      setTriggerConfetti(true);
-    }
-
-    updateTodo(todoId, { status: newStatus });
-
-    if (newStatus === "Warte auf..") {
+  const handleStatusChange = async (todoId: string, newStatus: string) => {
+    try {
       const todo = todos.find(t => t.id === todoId);
-      if (todo) {
+      if (!todo) return;
+
+      // If changing from "Warte auf.." to any other status, clear the waiting_for_task_id
+      const updates: any = { status: newStatus };
+      if (todo.status === "Warte auf.." && newStatus !== "Warte auf..") {
+        updates.waiting_for_task_id = null;
+      }
+
+      // Show confetti for completed tasks
+      if (newStatus === "Erledigt") {
+        setTriggerConfetti(true);
+      }
+
+      // Show wait dialog for "Warte auf.." status
+      if (newStatus === "Warte auf..") {
         setSelectedTodo(todo);
         setShowWaitDialog(true);
       }
+
+      const { error } = await supabase
+        .from('aisws_tasks')
+        .update(updates)
+        .eq('id', todoId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTodos(todos.map(t => 
+        t.id === todoId 
+          ? { ...t, ...updates }
+          : t
+      ));
+
+      if (selectedTodo?.id === todoId) {
+        setSelectedTodo(prev => prev ? { ...prev, ...updates } : null);
+      }
+    } catch (error) {
+      console.error('Error updating todo status:', error);
     }
   };
 
@@ -297,8 +328,90 @@ export default function SharedTodoListApp() {
     setSelectedTodo(prev => prev ? { ...prev, description } : null);
   };
 
+  useEffect(() => {
+    // Subscribe to users table changes
+    const usersSubscription = supabase
+      .channel('users-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: table('users')
+        },
+        (payload) => {
+          console.log('Users change received!', payload);
+          switch (payload.eventType) {
+            case 'INSERT':
+              setAllUsers(prev => [...prev, payload.new as User]);
+              break;
+            case 'UPDATE':
+              setAllUsers(prev => 
+                prev.map(user => 
+                  user.id === payload.new.id ? { ...user, ...payload.new } : user
+                )
+              );
+              // Update currentUser if it was modified
+              if (currentUser?.id === payload.new.id) {
+                setCurrentUser(prev => ({ ...prev, ...payload.new }));
+              }
+              break;
+            case 'DELETE':
+              setAllUsers(prev => prev.filter(user => user.id !== payload.old.id));
+              break;
+          }
+        }
+      )
+      .subscribe();
+
+    // Subscribe to tasks table changes
+    const tasksSubscription = supabase
+      .channel('tasks-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: table('tasks')
+        },
+        (payload) => {
+          console.log('Tasks change received!', payload);
+          switch (payload.eventType) {
+            case 'INSERT':
+              setTodos(prev => [...prev, payload.new as Todo]);
+              break;
+            case 'UPDATE':
+              setTodos(prev => 
+                prev.map(todo => 
+                  todo.id === payload.new.id ? { ...todo, ...payload.new } : todo
+                )
+              );
+              // If this was the selected todo, update it
+              if (selectedTodo?.id === payload.new.id) {
+                setSelectedTodo(prev => ({ ...prev!, ...payload.new }));
+              }
+              break;
+            case 'DELETE':
+              setTodos(prev => prev.filter(todo => todo.id !== payload.old.id));
+              // If this was the selected todo, close the dialog
+              if (selectedTodo?.id === payload.old.id) {
+                setSelectedTodo(null);
+              }
+              break;
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      usersSubscription.unsubscribe();
+      tasksSubscription.unsubscribe();
+    };
+  }, [currentUser?.id]); // Only re-run if current user changes
+
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
+    <div className="min-h-screen bg-gray-100 p-4">
       <AnimatePresence>
         <Dialog open={showSplash} onOpenChange={setShowSplash}>
           <DialogContent className="sm:max-w-md">
@@ -311,12 +424,12 @@ export default function SharedTodoListApp() {
                 <div className="space-y-4">
                   <div className="flex flex-col items-center gap-4">
                     <div className="relative">
-                      <img
+                      <Avatar
                         src={selectedFile ? URL.createObjectURL(selectedFile) : "/placeholder-avatar.png"}
                         alt="Profile"
                         className="w-24 h-24 rounded-full object-cover"
                       />
-                      <label
+                      <label 
                         htmlFor="profile-pic"
                         className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
                       >
@@ -368,10 +481,10 @@ export default function SharedTodoListApp() {
                       className="flex items-center gap-2 h-auto p-4"
                       onClick={() => handleUserSelect(user)}
                     >
-                      <img
+                      <Avatar
                         src={user.profile_pic_url}
                         alt={user.name}
-                        className="w-10 h-10 rounded-full"
+                        size="sm"
                       />
                       <span>{user.name}</span>
                     </Button>
@@ -406,29 +519,69 @@ export default function SharedTodoListApp() {
       <div className="max-w-6xl mx-auto space-y-8">
         {currentUser && (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm">
               <div className="flex items-center gap-4">
-                <img
-                  src={currentUser.profile_pic_url}
-                  alt={currentUser.name}
-                  className="w-12 h-12 rounded-full cursor-pointer"
-                  onClick={() => setShowSplash(true)}
-                />
-                <h1 className="text-2xl font-bold">
-                  Willkommen, {currentUser.name}!
-                </h1>
+                <div className="relative group cursor-pointer">
+                  <Avatar
+                    src={currentUser.profile_pic_url}
+                    alt={currentUser.name}
+                    className="border-2 border-white group-hover:opacity-75 transition-opacity"
+                  />
+                  <label 
+                    htmlFor="profile-pic-upload" 
+                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 text-white opacity-0 group-hover:opacity-100 rounded-full transition-opacity cursor-pointer"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </label>
+                  <input
+                    id="profile-pic-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file && currentUser) {
+                        // Show loading state
+                        const avatar = document.querySelector(`[alt="${currentUser.name}"]`);
+                        if (avatar) avatar.classList.add('opacity-50');
+                        
+                        const profilePicUrl = await uploadProfilePic(file);
+                        if (profilePicUrl) {
+                          const { error } = await supabase
+                            .from(table('users'))
+                            .update({ profile_pic_url: profilePicUrl })
+                            .eq('id', currentUser.id);
+                          
+                          if (!error) {
+                            setCurrentUser(prev => ({ ...prev, profile_pic_url: profilePicUrl }));
+                          }
+                        }
+                        
+                        // Remove loading state
+                        if (avatar) avatar.classList.remove('opacity-50');
+                      }
+                    }}
+                  />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold">Willkommen, {currentUser.name}!</h1>
+                  <p className="text-sm text-gray-500">Klicke auf dein Profilbild, um es zu ändern</p>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-                  className="w-10 h-10 p-0"
+                  onClick={() => setShowSplash(true)}
                 >
-                  {sortDirection === 'asc' ? 
-                    <ArrowUpNarrowWide className="h-5 w-5" /> : 
-                    <ArrowDownNarrowWide className="h-5 w-5" />
-                  }
+                  <Users2 className="w-5 h-5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                >
+                  {sortDirection === 'asc' ? <ArrowUpNarrowWide className="w-5 h-5" /> : <ArrowDownNarrowWide className="w-5 h-5" />}
                 </Button>
                 <Button
                   variant="default"
@@ -458,91 +611,89 @@ export default function SharedTodoListApp() {
                     {sortedTodos
                       .filter(todo => todo.status === status.label)
                       .map(todo => (
-                        <motion.div
+                        <div
                           key={todo.id}
-                          layout
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white rounded-lg shadow-sm p-4 cursor-pointer"
-                          onClick={() => handleTodoClick(todo)}
+                          className="bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
                         >
-                          <div className="space-y-3">
-                            <div className="text-lg font-medium">
-                              {todo.title}
-                            </div>
+                          <div className="p-4 cursor-pointer" onClick={() => setSelectedTodo(todo)}>
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
-                                  alt="Owner"
-                                  className="w-8 h-8 rounded-full"
-                                />
-                                <span className="text-sm text-gray-500">
-                                  {new Date(todo.updated_at).toLocaleDateString()}
+                              <div className="flex items-center gap-3 min-w-0">
+                                <Tooltip content={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}>
+                                  <Avatar
+                                    src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
+                                    alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
+                                    size="sm"
+                                  />
+                                </Tooltip>
+                                <span className="text-lg font-semibold text-gray-900 truncate">
+                                  {todo.title}
                                 </span>
                               </div>
-                              <div
-                                className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                                  todo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                                }`}
-                                style={{ backgroundColor: STATUSES.find(s => s.label === todo.status)?.color }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowStatusDropdown(todo.id);
-                                }}
-                                data-todo-id={todo.id}
-                              >
-                                {React.createElement(
-                                  STATUSES.find(s => s.label === todo.status)?.icon || CircleDashed,
-                                  { 
-                                    size: 14,
-                                    className: todo.status === "Offen" ? "text-gray-700" : "text-white"
-                                  }
-                                )}
-                                <span className="whitespace-nowrap">{todo.status}</span>
+                              <div className="flex items-center gap-2 ml-4">
+                                <div
+                                  className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                                    todo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                                  }`}
+                                  style={{ backgroundColor: STATUSES.find(s => s.label === todo.status)?.color }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowStatusDropdown(todo.id);
+                                  }}
+                                  data-todo-id={todo.id}
+                                >
+                                  {React.createElement(
+                                    STATUSES.find(s => s.label === todo.status)?.icon || CircleDashed,
+                                    { 
+                                      size: 14,
+                                      className: todo.status === "Offen" ? "text-gray-700" : "text-white"
+                                    }
+                                  )}
+                                  <span className="whitespace-nowrap">{todo.status}</span>
+                                </div>
                               </div>
                             </div>
-                            {todo.waiting_for_task_id && (
-                              <div className="text-sm text-gray-500 flex items-center gap-1.5 mt-2">
-                                <MessageCircle size={14} />
-                                Wartet auf: {todos.find(t => t.id === todo.waiting_for_task_id)?.title}
+
+                            {showStatusDropdown === todo.id && (
+                              <div 
+                                ref={statusDropdownRef}
+                                style={{
+                                  position: 'fixed',
+                                  transform: 'translateY(8px)'
+                                }}
+                                className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
+                              >
+                                {STATUSES.map(status => (
+                                  <button
+                                    key={status.label}
+                                    type="button"
+                                    className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
+                                      status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                                    }`}
+                                    style={{ backgroundColor: status.color }}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStatusChange(todo.id, status.label);
+                                      setShowStatusDropdown(null);
+                                    }}
+                                  >
+                                    {React.createElement(status.icon, { 
+                                      size: 14,
+                                      className: status.label === "Offen" ? "text-gray-700" : "text-white"
+                                    })}
+                                    <span className="whitespace-nowrap">{status.label}</span>
+                                  </button>
+                                ))}
                               </div>
                             )}
                           </div>
 
-                          {showStatusDropdown === todo.id && (
-                            <div 
-                              ref={statusDropdownRef}
-                              style={{
-                                position: 'fixed',
-                                transform: 'translateY(8px)'
-                              }}
-                              className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
-                            >
-                              {STATUSES.map(status => (
-                                <button
-                                  key={status.label}
-                                  type="button"
-                                  className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
-                                    status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                                  }`}
-                                  style={{ backgroundColor: status.color }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleStatusChange(todo.id, status.label);
-                                    setShowStatusDropdown(null);
-                                  }}
-                                >
-                                  {React.createElement(status.icon, { 
-                                    size: 14,
-                                    className: status.label === "Offen" ? "text-gray-700" : "text-white"
-                                  })}
-                                  <span className="whitespace-nowrap">{status.label}</span>
-                                </button>
-                              ))}
+                          {todo.waiting_for_task_id && (
+                            <div className="text-sm text-gray-500 flex items-center gap-1.5 mt-2">
+                              <MessageCircle size={14} />
+                              Wartet auf: {todos.find(t => t.id === todo.waiting_for_task_id)?.title}
                             </div>
                           )}
-                        </motion.div>
+                        </div>
                       ))}
                   </div>
                 </div>
@@ -581,70 +732,68 @@ export default function SharedTodoListApp() {
           {selectedTodo && (
             <div className="space-y-6">
               <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <img
-                    src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
-                    alt="Owner"
-                    className="w-10 h-10 rounded-full"
-                  />
-                  <div className="text-sm">
-                    <div className="font-medium">
-                      {allUsers.find(u => u.id === selectedTodo.owner_id)?.name}
-                    </div>
-                    <div className="text-gray-500">
-                      {new Date(selectedTodo.updated_at).toLocaleDateString()}
-                    </div>
-                  </div>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Tooltip content={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}>
+                    <Avatar
+                      src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
+                      alt={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}
+                      size="sm"
+                    />
+                  </Tooltip>
+                  <h1 className="text-2xl font-bold text-gray-900 truncate">
+                    {selectedTodo.title}
+                  </h1>
                 </div>
+                <div className="flex items-center gap-2 ml-4">
+                  <div
+                    className={`relative w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                      selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                    }`}
+                    style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
+                    onClick={() => setShowStatusDropdown(selectedTodo.id)}
+                  >
+                    {React.createElement(
+                      STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
+                      { 
+                        size: 14,
+                        className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
+                      }
+                    )}
+                    <span className="whitespace-nowrap">{selectedTodo.status}</span>
 
-                <div
-                  className={`relative w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                    selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                  }`}
-                  style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
-                  onClick={() => setShowStatusDropdown(selectedTodo.id)}
-                >
-                  {React.createElement(
-                    STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
-                    { 
-                      size: 14,
-                      className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
-                    }
-                  )}
-                  <span className="whitespace-nowrap">{selectedTodo.status}</span>
-
-                  {showStatusDropdown === selectedTodo.id && (
-                    <div 
-                      ref={statusDropdownRef}
-                      style={{
-                        position: 'fixed',
-                        transform: 'translateY(8px)'
-                      }}
-                      className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
-                    >
-                      {STATUSES.map(status => (
-                        <button
-                          key={status.label}
-                          type="button"
-                          className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
-                            status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
-                          }`}
-                          style={{ backgroundColor: status.color }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStatusChange(selectedTodo.id, status.label);
-                            setShowStatusDropdown(null);
-                          }}
-                        >
-                          {React.createElement(status.icon, { 
-                            size: 14,
-                            className: status.label === "Offen" ? "text-gray-700" : "text-white"
-                          })}
-                          <span className="whitespace-nowrap">{status.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                    {showStatusDropdown === selectedTodo.id && (
+                      <div 
+                        ref={statusDropdownRef}
+                        style={{
+                          position: 'fixed',
+                          transform: 'translateY(8px)'
+                        }}
+                        className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
+                      >
+                        {STATUSES.map(status => (
+                          <button
+                            key={status.label}
+                            type="button"
+                            className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
+                              status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                            }`}
+                            style={{ backgroundColor: status.color }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusChange(selectedTodo.id, status.label);
+                              setShowStatusDropdown(null);
+                            }}
+                          >
+                            {React.createElement(status.icon, { 
+                              size: 14,
+                              className: status.label === "Offen" ? "text-gray-700" : "text-white"
+                            })}
+                            <span className="whitespace-nowrap">{status.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -696,10 +845,10 @@ export default function SharedTodoListApp() {
                         setSelectedTodo(null);
                       }}
                     >
-                      <img
+                      <Avatar
                         src={owner?.profile_pic_url}
-                        alt={owner?.name}
-                        className="w-8 h-8 rounded-full flex-shrink-0"
+                        alt={owner?.name || 'User'}
+                        size="sm"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{todo.title}</div>
