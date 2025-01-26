@@ -54,6 +54,9 @@ export default function SharedTodoListApp() {
   const [showStatusDropdown, setShowStatusDropdown] = useState<string | null>(null);
   const [showWaitDialog, setShowWaitDialog] = useState(false);
   const statusDropdownRef = useRef<HTMLDivElement>(null);
+  const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   // Load saved user on initial mount
   useEffect(() => {
@@ -315,8 +318,30 @@ export default function SharedTodoListApp() {
     }
   };
 
-  const handleTitleEdit = (todoId: string, newTitle: string) => {
-    updateTodo(todoId, { title: newTitle });
+  const handleTitleEdit = async (todoId: string, newTitle: string) => {
+    try {
+      const { error } = await supabase
+        .from('aisws_tasks')
+        .update({ title: newTitle.trim() })
+        .eq('id', todoId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTodos(todos.map(t => 
+        t.id === todoId 
+          ? { ...t, title: newTitle.trim() }
+          : t
+      ));
+
+      if (selectedTodo?.id === todoId) {
+        setSelectedTodo(prev => prev ? { ...prev, title: newTitle.trim() } : null);
+      }
+
+      setEditingTodoId(null);
+    } catch (error) {
+      console.error('Error updating todo title:', error);
+    }
   };
 
   const handleTodoClick = (todo: Todo) => {
@@ -327,6 +352,22 @@ export default function SharedTodoListApp() {
     updateTodo(id, { description });
     setSelectedTodo(prev => prev ? { ...prev, description } : null);
   };
+
+  useEffect(() => {
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setEditingTodoId(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  useEffect(() => {
+    if (editingTodoId && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [editingTodoId]);
 
   useEffect(() => {
     // Subscribe to users table changes
@@ -625,9 +666,35 @@ export default function SharedTodoListApp() {
                                     size="sm"
                                   />
                                 </Tooltip>
-                                <span className="text-lg font-semibold text-gray-900 truncate">
-                                  {todo.title}
-                                </span>
+                                {editingTodoId === todo.id ? (
+                                  <form
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      handleTitleEdit(todo.id, editingTitle);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      ref={editInputRef}
+                                      type="text"
+                                      value={editingTitle}
+                                      onChange={(e) => setEditingTitle(e.target.value)}
+                                      onBlur={() => handleTitleEdit(todo.id, editingTitle)}
+                                      className="w-full text-lg font-semibold text-gray-900 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                                    />
+                                  </form>
+                                ) : (
+                                  <span 
+                                    className="text-lg font-semibold text-gray-900 truncate hover:text-blue-600 cursor-text"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingTodoId(todo.id);
+                                      setEditingTitle(todo.title);
+                                    }}
+                                  >
+                                    {todo.title}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-2 ml-4">
                                 <div
@@ -712,11 +779,95 @@ export default function SharedTodoListApp() {
               {selectedTodo && (
                 <div className="space-y-6">
                   <div className="space-y-2">
-                    <Input
-                      value={selectedTodo.title}
-                      onChange={e => handleTitleEdit(selectedTodo.id, e.target.value)}
-                      className="text-xl font-bold border-none px-0 focus-visible:ring-0"
-                    />
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Tooltip content={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}>
+                          <Avatar
+                            src={allUsers.find(u => u.id === selectedTodo.owner_id)?.profile_pic_url}
+                            alt={allUsers.find(u => u.id === selectedTodo.owner_id)?.name || 'User'}
+                            size="sm"
+                          />
+                        </Tooltip>
+                        {editingTodoId === selectedTodo.id ? (
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              handleTitleEdit(selectedTodo.id, editingTitle);
+                            }}
+                          >
+                            <input
+                              ref={editInputRef}
+                              type="text"
+                              value={editingTitle}
+                              onChange={(e) => setEditingTitle(e.target.value)}
+                              onBlur={() => handleTitleEdit(selectedTodo.id, editingTitle)}
+                              className="w-full text-2xl font-bold text-gray-900 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none"
+                            />
+                          </form>
+                        ) : (
+                          <h1 
+                            className="text-2xl font-bold text-gray-900 truncate hover:text-blue-600 cursor-text"
+                            onClick={() => {
+                              setEditingTodoId(selectedTodo.id);
+                              setEditingTitle(selectedTodo.title);
+                            }}
+                          >
+                            {selectedTodo.title}
+                          </h1>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        <div
+                          className={`relative w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                            selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                          }`}
+                          style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
+                          onClick={() => setShowStatusDropdown(selectedTodo.id)}
+                        >
+                          {React.createElement(
+                            STATUSES.find(s => s.label === selectedTodo.status)?.icon || CircleDashed,
+                            { 
+                              size: 14,
+                              className: selectedTodo.status === "Offen" ? "text-gray-700" : "text-white"
+                            }
+                          )}
+                          <span className="whitespace-nowrap">{selectedTodo.status}</span>
+
+                          {showStatusDropdown === selectedTodo.id && (
+                            <div 
+                              ref={statusDropdownRef}
+                              style={{
+                                position: 'fixed',
+                                transform: 'translateY(8px)'
+                              }}
+                              className="flex flex-col rounded-md overflow-hidden shadow-lg z-50 min-w-[110px] bg-white"
+                            >
+                              {STATUSES.map(status => (
+                                <button
+                                  key={status.label}
+                                  type="button"
+                                  className={`px-3 py-2 text-sm flex items-center gap-1.5 cursor-pointer transition-colors hover:opacity-90 ${
+                                    status.label === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
+                                  }`}
+                                  style={{ backgroundColor: status.color }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStatusChange(selectedTodo.id, status.label);
+                                    setShowStatusDropdown(null);
+                                  }}
+                                >
+                                  {React.createElement(status.icon, { 
+                                    size: 14,
+                                    className: status.label === "Offen" ? "text-gray-700" : "text-white"
+                                  })}
+                                  <span className="whitespace-nowrap">{status.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                     <textarea
                       value={selectedTodo.description || ''}
                       onChange={e => handleDescriptionChange(selectedTodo.id, e.target.value)}
@@ -746,7 +897,7 @@ export default function SharedTodoListApp() {
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   <div
-                    className={`relative w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                    className={`w-[110px] px-3 py-1.5 rounded-md text-sm flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
                       selectedTodo.status === "Offen" ? "bg-gray-100 text-gray-700" : "text-white"
                     }`}
                     style={{ backgroundColor: STATUSES.find(s => s.label === selectedTodo.status)?.color }}
