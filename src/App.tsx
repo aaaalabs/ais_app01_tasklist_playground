@@ -168,7 +168,7 @@ export default function SharedTodoListApp() {
   async function createTodo(title: string) {
     if (!currentUser) return;
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from(table('tasks'))
       .insert([
         {
@@ -176,16 +176,11 @@ export default function SharedTodoListApp() {
           owner_id: currentUser.id,
           status: 'Offen'
         }
-      ])
-      .select()
-      .single();
+      ]);
     
     if (error) {
       console.error('Error creating todo:', error);
-      return;
     }
-
-    setTodos(prev => [data, ...prev]);
   }
 
   async function updateTodo(id: string, updates: Partial<Todo>) {
