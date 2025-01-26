@@ -621,12 +621,14 @@ export default function SharedTodoListApp() {
                       size={40}
                       className="cursor-pointer hover:opacity-80 transition-opacity"
                     />
-                    <label 
-                      htmlFor="profile-pic-upload" 
-                      className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
-                    >
-                      <Camera className="w-4 h-4" />
-                    </label>
+                    {!currentUser.profile_pic_url && (
+                      <label 
+                        htmlFor="profile-pic-upload" 
+                        className="absolute bottom-0 right-0 bg-blue-500 text-white p-2 rounded-full cursor-pointer hover:bg-blue-600 transition-colors"
+                      >
+                        <Camera className="w-4 h-4" />
+                      </label>
+                    )}
                     <input
                       id="profile-pic-upload"
                       type="file"
@@ -772,7 +774,7 @@ export default function SharedTodoListApp() {
                                       <Avatar
                                         src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
                                         alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
-                                        size={24}
+                                        size={32}
                                         className="mr-2"
                                       />
                                       <span className="text-sm text-gray-600">
