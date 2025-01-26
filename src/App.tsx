@@ -13,7 +13,8 @@ import {
   Plus,
   ArrowDownNarrowWide,
   ArrowUpNarrowWide,
-  Users2
+  Users2,
+  Trash2
 } from "lucide-react";
 import { supabase, table } from './lib/supabase';
 import type { User, Todo } from './types';
@@ -354,6 +355,18 @@ export default function SharedTodoListApp() {
     setSelectedTodo(prev => prev ? { ...prev, description } : null);
   };
 
+  const handleDeleteTodo = async (todoId: string) => {
+    const { error } = await supabase
+      .from(table('tasks'))
+      .delete()
+      .eq('id', todoId);
+
+    if (!error) {
+      setTodos(prev => prev.filter(t => t.id !== todoId));
+      setSelectedTodo(null);
+    }
+  };
+
   useEffect(() => {
     function handleEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') {
@@ -562,19 +575,19 @@ export default function SharedTodoListApp() {
         <div className="max-w-6xl mx-auto space-y-8">
           {currentUser && (
             <>
-              <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="relative group cursor-pointer">
+              <div className="flex items-center justify-between bg-white px-4 py-2 rounded-lg shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="relative group cursor-pointer shrink-0">
                     <Avatar
                       src={currentUser.profile_pic_url}
                       alt={currentUser.name}
-                      className="border-2 border-white group-hover:opacity-75 transition-opacity"
+                      className="border-2 border-white group-hover:opacity-75 transition-opacity w-10 h-10"
                     />
                     <label 
                       htmlFor="profile-pic-upload" 
                       className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 text-white opacity-0 group-hover:opacity-100 rounded-full transition-opacity cursor-pointer"
                     >
-                      <Camera className="w-5 h-5" />
+                      <Camera className="w-4 h-4" />
                     </label>
                     <input
                       id="profile-pic-upload"
@@ -606,9 +619,9 @@ export default function SharedTodoListApp() {
                       }}
                     />
                   </div>
-                  <div>
-                    <h1 className="text-2xl font-bold">Willkommen, {currentUser.name}!</h1>
-                    <p className="text-sm text-gray-500">Klicke auf dein Profilbild, um es zu ändern</p>
+                  <div className="min-w-0">
+                    <h1 className="text-lg font-semibold truncate">Willkommen, {currentUser.name}!</h1>
+                    <p className="text-xs text-gray-500 truncate sm:block hidden">Klicke auf dein Profilbild, um es zu ändern</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -616,23 +629,25 @@ export default function SharedTodoListApp() {
                     variant="ghost"
                     size="icon"
                     onClick={() => setShowSplash(true)}
+                    className="w-8 h-8"
                   >
-                    <Users2 className="w-5 h-5" />
+                    <Users2 className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className="w-8 h-8"
                   >
-                    {sortDirection === 'asc' ? <ArrowUpNarrowWide className="w-5 h-5" /> : <ArrowDownNarrowWide className="w-5 h-5" />}
+                    {sortDirection === 'asc' ? <ArrowUpNarrowWide className="w-4 h-4" /> : <ArrowDownNarrowWide className="w-4 h-4" />}
                   </Button>
                   <Button
                     variant="default"
                     size="icon"
                     onClick={addNewTodo}
-                    className="w-10 h-10 p-0 bg-blue-600 hover:bg-blue-700"
+                    className="w-8 h-8 bg-blue-600 hover:bg-blue-700"
                   >
-                    <Plus className="h-5 w-5" />
+                    <Plus className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -713,13 +728,18 @@ export default function SharedTodoListApp() {
 
                               {/* User and Status Row */}
                               <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2">
                                   <Tooltip content={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}>
-                                    <Avatar
-                                      src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
-                                      alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
-                                      size="sm"
-                                    />
+                                    <div className="flex items-center gap-2">
+                                      <Avatar
+                                        src={allUsers.find(u => u.id === todo.owner_id)?.profile_pic_url}
+                                        alt={allUsers.find(u => u.id === todo.owner_id)?.name || 'User'}
+                                        size="sm"
+                                      />
+                                      <span className="text-sm text-gray-600">
+                                        {allUsers.find(u => u.id === todo.owner_id)?.name}
+                                      </span>
+                                    </div>
                                   </Tooltip>
                                 </div>
                                 <div className="flex items-center">
@@ -877,12 +897,26 @@ export default function SharedTodoListApp() {
                   </div>
 
                   {/* Description */}
-                  <textarea
-                    value={selectedTodo.description || ''}
-                    onChange={e => handleDescriptionChange(selectedTodo.id, e.target.value)}
-                    placeholder="Beschreibung hinzufügen..."
-                    className="w-full h-32 p-3 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 hover:bg-white transition-colors"
-                  />
+                  <div className="flex flex-col gap-4">
+                    <textarea
+                      value={selectedTodo.description || ''}
+                      onChange={e => handleDescriptionChange(selectedTodo.id, e.target.value)}
+                      placeholder="Beschreibung hinzufügen..."
+                      className="w-full h-32 p-3 rounded-md border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-gray-50 hover:bg-white transition-colors"
+                    />
+                    
+                    <div className="flex justify-end">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteTodo(selectedTodo.id)}
+                        className="text-sm"
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Löschen
+                      </Button>
+                    </div>
+                  </div>
 
                   {/* Waiting Status */}
                   {selectedTodo.waiting_for_task_id && (
